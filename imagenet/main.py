@@ -36,6 +36,10 @@ parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
+parser.add_argument('--num-minibatches', default=None, type=int,
+                    help="Number of minibatches to run")
+parser.add_argument('--no-validate', dest='no_validate', action='store_true',
+                    help="No validation")
 parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
@@ -236,6 +240,12 @@ def main_worker(gpu, ngpus_per_node, args):
         validate(val_loader, model, criterion, args)
         return
 
+    if args.num_minibatches is not None:
+        print('Number of mini-batches:', args.num_minibatches)
+        args.start_epoch = 0
+        args.epochs = 1
+        print('Start epoch, epochs:', args.start_epoch, args.epochs)
+
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
@@ -244,12 +254,14 @@ def main_worker(gpu, ngpus_per_node, args):
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch, args)
 
-        # evaluate on validation set
-        acc1 = validate(val_loader, model, criterion, args)
+        is_best = False
+        if not args.no_validate:
+            # evaluate on validation set
+            acc1 = validate(val_loader, model, criterion, args)
 
-        # remember best acc@1 and save checkpoint
-        is_best = acc1 > best_acc1
-        best_acc1 = max(acc1, best_acc1)
+            # remember best acc@1 and save checkpoint
+            is_best = acc1 > best_acc1
+            best_acc1 = max(acc1, best_acc1)
 
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
@@ -268,8 +280,12 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
+    if args.num_minibatches is not None:
+        num_batches = args.num_minibatches
+    else:
+        num_batches = len(train_loader)
     progress = ProgressMeter(
-        len(train_loader),
+        num_batches,
         [batch_time, data_time, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch))
 
@@ -278,6 +294,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
+        if args.num_minibatches is not None and i >= args.num_minibatches:
+            break
+
         # measure data loading time
         data_time.update(time.time() - end)
 

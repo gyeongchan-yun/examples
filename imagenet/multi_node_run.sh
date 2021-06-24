@@ -25,7 +25,9 @@ CUDA_VISIBLE_DEVICES=$visible_gpus python main.py -a $MODEL \
   --world-size $world_size \
   --rank $rank \
   -b $batch_size \
-  --epochs $epochs \
+  --num-minibatches 1000 \
+  --no-validate \
   $DATA_PATH 
 
+  #--epochs $epochs \
 echo -e "finish main.py!"
